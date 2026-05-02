@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import csv
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -21,13 +22,17 @@ FRAME_SIZE = 160
 TEXT_X = 210
 
 ROOT = Path(__file__).resolve().parent
-CSV_PATH = ROOT / 'pat-map.csv'
-CARDS_DIR = ROOT / 'cards'
-GAME_ROOT = ROOT.parent.parent / 'koukai2'
-PAT_PATHS = {
-    '1.PAT': GAME_ROOT / '1.PAT',
-    '2.PAT': GAME_ROOT / '2.PAT',
-}
+DEFAULT_CSV_PATH = ROOT / 'pat-map.csv'
+DEFAULT_CARDS_DIR = ROOT / 'cards'
+DEFAULT_GAME_DIR = ROOT.parent.parent / 'koukai2'
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description='Generate SVG glyph cards from a PAT map CSV.')
+    parser.add_argument('--csv', dest='csv_path', default=str(DEFAULT_CSV_PATH), help='path to pat-map.csv')
+    parser.add_argument('--game-dir', default=str(DEFAULT_GAME_DIR), help='directory containing 1.PAT and 2.PAT')
+    parser.add_argument('--output-dir', default=str(DEFAULT_CARDS_DIR), help='directory to write SVG cards into')
+    return parser
 
 
 def parse_pat_file(path: Path) -> list[bytes]:
@@ -97,9 +102,17 @@ def render_card(row: dict[str, str], glyph: bytes) -> str:
 
 
 def main() -> None:
-    CARDS_DIR.mkdir(parents=True, exist_ok=True)
-    glyph_cache = {pat_name: parse_pat_file(path) for pat_name, path in PAT_PATHS.items()}
-    with CSV_PATH.open(encoding='utf-8', newline='') as f:
+    args = build_parser().parse_args()
+    csv_path = Path(args.csv_path).expanduser().resolve()
+    game_dir = Path(args.game_dir).expanduser().resolve()
+    cards_dir = Path(args.output_dir).expanduser().resolve()
+    cards_dir.mkdir(parents=True, exist_ok=True)
+    pat_paths = {
+        '1.PAT': game_dir / '1.PAT',
+        '2.PAT': game_dir / '2.PAT',
+    }
+    glyph_cache = {pat_name: parse_pat_file(path) for pat_name, path in pat_paths.items()}
+    with csv_path.open(encoding='utf-8', newline='') as f:
         rows = list(csv.DictReader(f))
     for row in rows:
         pat_name = row['pat']
@@ -108,8 +121,11 @@ def main() -> None:
         svg = render_card(row, glyph)
         prefix = '1' if pat_name == '1.PAT' else '2'
         file_name = f'{prefix}-{index1:04d}.svg'
-        (CARDS_DIR / file_name).write_text(svg, encoding='utf-8')
-    print(f'generated {len(rows)} cards into {CARDS_DIR}')
+        (cards_dir / file_name).write_text(svg, encoding='utf-8')
+    print(f'csv: {csv_path}')
+    print(f'game_dir: {game_dir}')
+    print(f'output_dir: {cards_dir}')
+    print(f'generated: {len(rows)}')
 
 
 if __name__ == '__main__':
